@@ -12,6 +12,7 @@ const bbl = new Engine({
 
 ## **Events**:
 ``fetch:assginments`` **Returns an array of assignment objects**
+
 ``fetch:courses`` **Returns an array of courses objects**
 
 
