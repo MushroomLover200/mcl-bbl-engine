@@ -1,0 +1,14 @@
+{
+  "name": "mcl-bbl-engine",
+  "version": "1.0.0",
+  "description": "MBE is a nodejs module for automating/scraping Malayan Colleges Laguna's Blackboard Learning Management System. It was made because I really hate professors being unclear whether to announce in MS Teams or BBL. You know, they announce in BBL expecting students to check it when they don't check BBL messages at all. Those types of professors/instructors. Then the dogshit MS Teams notifications systems that was build by retards. Not the fault of the school but still, one of my many gripes. :D",
+  "license": "ISC",
+  "author": "Fredrick Neil Erispe",
+  "type": "commonjs",
+  "main": "mbe.js",
+  "scripts": {
+  },
+  "dependencies": {
+    "playwright": "^1.55.0"
+  }
+}
