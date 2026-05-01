@@ -1,5 +1,14 @@
 # MBE
 It uses playwright to interact with the BBL website. Events are fired to signal that the object has been encountered, i.e assignments/courses list.
+
+## Prerequisites
+* You must have NodeJS 22+ installed
+* Playwright Firefox must be installed
+```
+npx playwright install firefox
+```
+
+
 ## **Sample usage**:
 ```
 // initialize an engine object
@@ -8,14 +17,28 @@ const bbl = new Engine({
     password: 'SomePassword',
     debug: true,
 })
+
+// getCalendar allows us to fetch calendar activities from the past and future
+// getCalendar(daysFromNow, daysToNow)
+// -- daysFromNow - how many days to today (to the future)
+// -- daysToNow - how many days from today (to today, from the past)
+
+
+// fetch courses
+const courses = await bbl.getCourses();
+
+// fetch calendar events
+const calendarEvents = await bbl.getCalendar(14, 7);
+
+// fetches announcements from ALL courses in the current term
+const announcements = getAnnouncements();
 ```
 
-## **Events**:
-``fetch:assginments`` **Returns an array of assignment objects**
+### Or
 
-``fetch:courses`` **Returns an array of courses objects**
+You can simply run sample.js.
 
+``node sample.js 2025studentnumber password``
 
-
-## More features to come!
-This project was rushed because I wanted to reorganize my study system. Microsoft teams notifications not giving a single notification is hell!
+## Notes:
+The engine automatically hides courses from previous terms.

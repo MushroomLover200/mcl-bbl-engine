@@ -2,18 +2,29 @@ const Engine = require('./mbe');
 
 async function test() {
     const bbl = await Engine.create({
-        username: '2025180071',
-        password: 'SomePassword',
+        username: process.argv[2], // hello!
+        password: process.argv[3],
         debug: true
     });
 
+
+    console.log(bbl._getCurrentTerm());
     bbl.on('log', (data) => {
         console.log(data);
     })
 
-    const courses = await bbl.getCourses();
-    console.log('Fetched Courses:', courses);
+    // let announcements = await bbl.getAnnouncements();
+    // console.log(`Fetched ${announcements.length} announcements from all courses.`);
+
+    // Fetch calendar events: 14 days into the future, 7 days into the past
+    const calendarEvents = await bbl.getCalendar(14, 7);
+    console.log(`Fetched ${calendarEvents.length} calendar events.`);
     
+    // Optional: Print a few events to verify
+    calendarEvents.slice(0, 3).forEach(event => {
+        console.log(`- [${new Date(event.startDate).toLocaleString()}] ${event.title}`);
+    });
+
     await bbl.close();
 }
 
