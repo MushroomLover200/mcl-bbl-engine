@@ -38,16 +38,11 @@ class Engine extends EventEmitter {
     }
 
     _setupForwarding() {
-        // Forward logs and errors
-        this.session.on('log', (data) => this.emit('log', data));
-        this.api.on('log', (data) => this.emit('log', data));
-        
-        this.session.on('error', (err) => {
-            this._log('ERROR', err.message);
-            this.emit('error', err);
-        });
+        // Automatically forward events from internal modules
+        this._proxyEvents(this.session, ['log', 'error', 'userData:update', 'cookie:update']);
+        this._proxyEvents(this.api, ['log', 'error', 'fetch:courses']);
 
-        // Sync session data to API client
+        // Specialized sync logic (internal orchestration)
         this.session.on('cookie:update', (cookie) => {
             this._log('DEBUG', 'Session cookie updated.');
             this.api.setSession({ cookie });
@@ -57,9 +52,18 @@ class Engine extends EventEmitter {
             this._log('DEBUG', 'User data acquired.');
             this.api.setSession({ userData });
         });
+    }
 
-        // Forward data events
-        this.api.on('fetch:courses', (data) => this.emit('fetch:courses', data));
+    /**
+     * Proxies a list of events from a source emitter to this instance.
+     * @param {EventEmitter} source - The source event emitter.
+     * @param {string[]} events - List of event names to proxy.
+     * @private
+     */
+    _proxyEvents(source, events) {
+        events.forEach(event => {
+            source.on(event, (...args) => this.emit(event, ...args));
+        });
     }
 
     /**
