@@ -1,5 +1,5 @@
 # MBE
-It uses playwright to interact with the BBL website. Events are fired to signal that the object has been encountered, i.e assignments/courses list.
+It uses playwright to interact with the BBL website. 
 
 ## Prerequisites
 * You must have NodeJS 22+ installed
