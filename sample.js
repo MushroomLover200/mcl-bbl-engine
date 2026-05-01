@@ -11,11 +11,10 @@ async function test() {
         console.log(data);
     })
 
-    bbl.on('fetch:courses', (courses) => {
-        console.log(courses);
-    });
-
-    await bbl.getCourses();
+    const courses = await bbl.getCourses();
+    console.log('Fetched Courses:', courses);
+    
+    await bbl.close();
 }
 
 test();

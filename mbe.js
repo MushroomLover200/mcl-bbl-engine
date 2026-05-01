@@ -31,7 +31,6 @@ class Engine extends EventEmitter {
         });
 
         this.api = new APIClient();
-        this.lock = Promise.resolve();
 
         this._setupForwarding();
         
@@ -39,16 +38,6 @@ class Engine extends EventEmitter {
             this.session.startSessionKeepAlive(refreshInterval);
             return true;
         });
-    }
-
-    /**
-     * Shared lock to ensure the engine behaves as a single state machine.
-     * @private
-     */
-    async _enqueue(task) {
-        const result = this.lock.then(task);
-        this.lock = result.catch(() => {});
-        return result;
     }
 
     _setupForwarding() {
@@ -70,10 +59,11 @@ class Engine extends EventEmitter {
     }
 
     /**
-     * Fetches courses list sequentially.
+     * Fetches courses list directly.
+     * @returns {Promise<object[]>}
      */
     async getCourses() {
-        return this._enqueue(() => this.api.getCourses());
+        return this.api.getCourses();
     }
 
     /**
