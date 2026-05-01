@@ -4,23 +4,13 @@ const getString = require('./utils/getString');
 const getCourses = require('./utils/getCourses');
 const { EventEmitter } = require('events');
 
+const BASE_URL = 'https://mcl.blackboard.com';
+const API_BASE = `${BASE_URL}/learn/api/v1`;
+
 /**
  * The Engine class automates interactions with the Blackboard learning platform.
- * It handles login, data fetching, and emits events for different data types.
- * It now includes robust queuing systems for browser and API actions to ensure
- * sequential execution and prevent race conditions.
- * @extends EventEmitter
  */
 class Engine extends EventEmitter {
-    // Expected shape of the userData object after it's fetched.
-    // userData = { emailAddress, familyName, givenName, uuid, foundationsId, userName, id, institutionEmail };
-
-    /**
-     * @param {object} options - The configuration options for the engine.
-     * @param {string} options.username - The username for Blackboard.
-     * @param {string} options.password - The password for Blackboard.
-     * @param {boolean} [options.debug=false] - If true, runs the browser in non-headless mode for debugging.
-     */
     constructor({
         username,
         password,
@@ -36,16 +26,26 @@ class Engine extends EventEmitter {
         this.cookie = null;
         this.userData = null;
 
-        // --- Queueing System State ---
         this.browserActionQueue = [];
         this.apiActionQueue = [];
         this.isBrowserReady = false;
         this.isApiReady = false;
         this.isProcessingBrowserQueue = false;
         this.isProcessingApiQueue = false;
-        // ---
 
         this.initialized = this.initialize();
+    }
+
+    /**
+     * Closes the browser and cleans up resources.
+     */
+    async close() {
+        this._log('INFO', 'Closing browser and cleaning up resources.');
+        if (this.browser) {
+            await this.browser.close();
+        }
+        this.isBrowserReady = false;
+        this.isApiReady = false;
     }
 
     /**
@@ -64,33 +64,44 @@ class Engine extends EventEmitter {
      * @returns {Promise<boolean>} A promise that resolves to true upon successful initialization.
      */
     async initialize() {
-        this._log('INFO', 'Engine initialization started.');
-        this.browser = await firefox.launch({
-            headless: this.isHeadless,
-            ignoreHTTPSErrors: true
-        });
+        try {
+            this._log('INFO', 'Engine initialization started.');
+            this.browser = await firefox.launch({
+                headless: this.isHeadless,
+                ignoreHTTPSErrors: true
+            });
 
-        this.page = await this.browser.newPage();
-        await this.page.goto('https://mcl.blackboard.com/');
-        this._setupNetworkInterception();
+            this.page = await this.browser.newPage();
+            await this.page.goto(BASE_URL);
+            this._setupNetworkInterception();
 
-        const loginPageHeader = '<h1 class="welcome">Login to Mapúa MCL Blackboard</h1>';
-        const isNotLoggedIn = (await this.page.content()).includes(loginPageHeader);
+            // Wait for either the login header or the post-login ultra page
+            await Promise.race([
+                this.page.waitForSelector('h1.welcome', { timeout: 10000 }).catch(() => {}),
+                this.page.waitForURL('**/ultra', { timeout: 10000 }).catch(() => {})
+            ]);
 
-        if (!isNotLoggedIn) {
-            this._log('INFO', 'User is already logged in.');
-        } else {
-            this._log('INFO', 'User not logged in, proceeding with login.');
-            await this.login();
-            this._log('INFO', 'Login successful.');
+            const loginPageHeader = '<h1 class="welcome">Login to Mapúa MCL Blackboard</h1>';
+            const content = await this.page.content();
+            const isNotLoggedIn = content.includes(loginPageHeader);
+
+            if (!isNotLoggedIn) {
+                this._log('INFO', 'User is already logged in.');
+            } else {
+                this._log('INFO', 'User not logged in, proceeding with login.');
+                await this.login();
+                this._log('INFO', 'Login successful.');
+            }
+            
+            this.isBrowserReady = true;
+            this._log('INFO', 'Browser is ready. Processing browser action queue.');
+            this._tryProcessBrowserQueue();
+
+            return true;
+        } catch (error) {
+            this._log('ERROR', `Initialization failed: ${error.message}`);
+            throw error;
         }
-        
-        // Signal that the browser is ready and process any queued browser actions.
-        this.isBrowserReady = true;
-        this._log('INFO', 'Browser is ready. Processing browser action queue.');
-        this._tryProcessBrowserQueue();
-
-        return true;
     }
 
     /**
@@ -98,10 +109,13 @@ class Engine extends EventEmitter {
      */
     async login() {
         try {
-            await this.page.getByRole('button', { name: 'OK' }).click({ timeout: 5000 });
-            this._log('DEBUG', 'Clicked cookie consent button.');
+            const cookieButton = this.page.getByRole('button', { name: 'OK' });
+            if (await cookieButton.isVisible({ timeout: 2000 })) {
+                await cookieButton.click();
+                this._log('DEBUG', 'Clicked cookie consent button.');
+            }
         } catch {
-            this._log('DEBUG', 'Cookie consent banner not found, skipping.');
+            this._log('DEBUG', 'Cookie consent banner check failed or not found.');
         }
 
         await this.page.getByRole('textbox', { name: 'Username' }).fill(this.username);
@@ -109,9 +123,10 @@ class Engine extends EventEmitter {
         await this.page.getByRole('button', { name: 'Sign In', exact: true }).click();
         
         try {
-            await this.page.waitForLoadState('networkidle', { timeout: 10000 });
-        } catch {
-            this._log('WARN', 'Network did not become idle after login, continuing anyway.');
+            await this.page.waitForURL('**/ultra', { timeout: 15000 });
+            await this.page.waitForLoadState('networkidle', { timeout: 5000 });
+        } catch (error) {
+            this._log('WARN', `Login post-navigation check timed out: ${error.message}`);
         }
     }
 
@@ -135,10 +150,10 @@ class Engine extends EventEmitter {
         this._log('DEBUG', 'Queueing API action: getCourses');
         const action = async () => {
             this._log('INFO', 'Fetching courses via API.');
-            const url = `https://mcl.blackboard.com/learn/api/v1/users/${this.userData.id}/memberships?expand=course.effectiveAvailability,course.permissions,courseRole&includeCount=true&limit=10000`;
+            const url = `${API_BASE}/users/${this.userData.id}/memberships?expand=course.effectiveAvailability,course.permissions,courseRole&includeCount=true&limit=10000`;
 
             try {
-                const response = await fetch(url, { headers: { cookie: this.cookie } });
+                const response = await this._fetchWithBBLCookies(url);
                 if (!response.ok) {
                     throw new Error(`API request failed with status ${response.status}`);
                 }
@@ -152,6 +167,27 @@ class Engine extends EventEmitter {
         };
         this.apiActionQueue.push(action);
         this._tryProcessApiQueue();
+    }
+
+    /**
+     * A wrapper for the global fetch API that automatically includes the current session cookie.
+     * @param {string|URL|Request} url - The URL to fetch.
+     * @param {RequestInit} [options] - Optional fetch options.
+     * @returns {Promise<Response>} The fetch response.
+     * @private
+     */
+    async _fetchWithBBLCookies(url, options = {}) {
+        if (!this.cookie) {
+            throw new Error('Cannot fetch: Session cookie is not available.');
+        }
+
+        const headers = new Headers(options.headers || {});
+        headers.set('cookie', this.cookie);
+
+        return fetch(url, {
+            ...options,
+            headers: headers
+        });
     }
     
     /**
@@ -202,7 +238,7 @@ class Engine extends EventEmitter {
      * @private
      */
     _setupNetworkInterception() {
-        this.page.route(/https:\/\/mcl\.blackboard\.com\//, async (route) => {
+        this.page.route(`${BASE_URL}/**`, async (route) => {
             const headers = await route.request().allHeaders();
             if (headers.cookie) {
                 this.cookie = headers.cookie;
@@ -215,7 +251,7 @@ class Engine extends EventEmitter {
             const url = response.url();
             const method = response.request().method();
 
-            if (url === 'https://mcl.blackboard.com/ultra' && method === 'GET') {
+            if (url.startsWith(`${BASE_URL}/ultra`) && method === 'GET') {
                 try {
                     const responseBody = await response.text();
                     const userDataString = getString(responseBody, 'user: ', ',\n');
@@ -223,11 +259,13 @@ class Engine extends EventEmitter {
                         this.userData = JSON.parse(userDataString);
                         this._checkApiReady();
                     }
-                } catch { /* Ignore parsing errors */ }
+                } catch (error) {
+                    this._log('DEBUG', `Failed to parse userData: ${error.message}`);
+                }
                 return;
             }
 
-            if (url === 'https://mcl.blackboard.com/learn/api/v1/streams/ultra' && method === 'POST') {
+            if (url === `${API_BASE}/streams/ultra` && method === 'POST') {
                 this._handleActivityStreamResponse(response);
             }
         });

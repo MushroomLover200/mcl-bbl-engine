@@ -19,11 +19,11 @@ function getCoursesAsJson(coursesDataObject) {
       const courseDetails = enrollment.course;
       return {
         // 'courseId' from the top-level course object (e.g., "IT101-1.CIS103.1T.25.26")
-        courseId: courseDetails.courseId,
+        courseId: courseDetails?.courseId,
         // 'name' provides the full, human-readable name of the course
-        courseName: courseDetails.name,
+        courseName: courseDetails?.name,
         // 'id' is the internal Blackboard ID (e.g., "_55137_1")
-        id: courseDetails.id,
+        id: courseDetails?.id,
       };
     });
 

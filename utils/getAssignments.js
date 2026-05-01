@@ -31,15 +31,15 @@ function getActivitiesAsJson(streamDataObject) {
         // 3. Map the filtered data to conform to the target schema.
         .map(entry => {
             const details = entry.itemSpecificData;
-            const notificationDetails = details.notificationDetails;
+            const notificationDetails = details?.notificationDetails;
 
             return {
-                activityName: details.title || 'Untitled Activity',
+                activityName: details?.title || 'Untitled Activity',
                 courseName: courseMap.get(entry.se_courseId) || 'Unknown Course',
-                type: notificationDetails.sourceType === 'UA' ? 'Assignment' : 'Test',
+                type: notificationDetails?.sourceType === 'UA' ? 'Assignment' : 'Test',
                 // Provide the ISO string if the date exists, otherwise null. JSON handles null correctly.
-                dueDate: notificationDetails.dueDate || null,
-                givenDate: notificationDetails.startDate || null,
+                dueDate: notificationDetails?.dueDate || null,
+                givenDate: notificationDetails?.startDate || null,
             };
         });
 
