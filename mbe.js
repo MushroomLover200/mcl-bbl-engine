@@ -31,6 +31,7 @@ class Engine extends EventEmitter {
         });
 
         this.api = new APIClient();
+        this.isBusy = false;
 
         this._setupForwarding();
         
@@ -60,10 +61,21 @@ class Engine extends EventEmitter {
 
     /**
      * Fetches courses list directly.
-     * @returns {Promise<object[]>}
+     * Returns false if another operation is in progress.
+     * @returns {Promise<object[]|boolean>}
      */
     async getCourses() {
-        return this.api.getCourses();
+        if (this.isBusy) {
+            this._log('WARN', 'Engine is busy. Operation cancelled.');
+            return false;
+        }
+        
+        this.isBusy = true;
+        try {
+            return await this.api.getCourses();
+        } finally {
+            this.isBusy = false;
+        }
     }
 
     /**
