@@ -8,17 +8,19 @@ const APIClient = require('./lib/APIClient');
  */
 class Engine extends EventEmitter {
     /**
-     * @param {object} options - Configuration options.
-     * @param {string} options.username - Blackboard username.
-     * @param {string} options.password - Blackboard password.
-     * @param {boolean} [options.debug=false] - Debug mode (non-headless).
-     * @param {number} [options.refreshInterval=900000] - Cookie refresh interval in ms (default 15m).
+     * Static factory method for clean initialization.
      */
+    static async create(options) {
+        const engine = new Engine(options);
+        await engine.initialized;
+        return engine;
+    }
+
     constructor({
         username,
         password,
         debug = false,
-        refreshInterval = 1000 * 60 * 15
+        refreshInterval = 900000
     }) {
         super();
         
@@ -29,57 +31,49 @@ class Engine extends EventEmitter {
         });
 
         this.api = new APIClient();
+        this.lock = Promise.resolve();
 
         this._setupForwarding();
+        
         this.initialized = this.session.initialize().then(() => {
             this.session.startSessionKeepAlive(refreshInterval);
             return true;
         });
     }
 
+    /**
+     * Shared lock to ensure the engine behaves as a single state machine.
+     * @private
+     */
+    async _enqueue(task) {
+        const result = this.lock.then(task);
+        this.lock = result.catch(() => {});
+        return result;
+    }
+
     _setupForwarding() {
-        // Automatically forward events from internal modules
         this._proxyEvents(this.session, ['log', 'error', 'userData:update', 'cookie:update']);
         this._proxyEvents(this.api, ['log', 'error', 'fetch:courses']);
 
-        // Specialized sync logic (internal orchestration)
-        this.session.on('cookie:update', (cookie) => {
-            this._log('DEBUG', 'Session cookie updated.');
-            this.api.setSession({ cookie });
-        });
-
-        this.session.on('userData:update', (userData) => {
-            this._log('DEBUG', 'User data acquired.');
-            this.api.setSession({ userData });
-        });
+        this.session.on('cookie:update', (cookie) => this.api.setSession({ cookie }));
+        this.session.on('userData:update', (userData) => this.api.setSession({ userData }));
     }
 
-    /**
-     * Proxies a list of events from a source emitter to this instance.
-     * @param {EventEmitter} source - The source event emitter.
-     * @param {string[]} events - List of event names to proxy.
-     * @private
-     */
     _proxyEvents(source, events) {
         events.forEach(event => {
             source.on(event, (...args) => this.emit(event, ...args));
         });
     }
 
-    /**
-     * Internal logging helper.
-     * @private
-     */
     _log(level, message) {
         this.emit('log', { date: Date.now(), level, message });
     }
 
     /**
-     * Fetches courses list.
+     * Fetches courses list sequentially.
      */
     async getCourses() {
-        this._log('DEBUG', 'Triggering getCourses via API.');
-        return this.api.getCourses();
+        return this._enqueue(() => this.api.getCourses());
     }
 
     /**

@@ -1,14 +1,11 @@
 const Engine = require('./mbe');
 
 async function test() {
-    const bbl = new Engine({
+    const bbl = await Engine.create({
         username: '2025180071',
         password: 'SomePassword',
-        debug: true,
-        headless: false
-    })
-
-    await bbl.initialized;
+        debug: true
+    });
 
     bbl.on('log', (data) => {
         console.log(data);
