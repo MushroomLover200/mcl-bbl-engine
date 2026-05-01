@@ -59,7 +59,6 @@ class Engine extends EventEmitter {
         });
 
         // Forward data events
-        this.session.on('fetch:assignments', (data) => this.emit('fetch:assignments', data));
         this.api.on('fetch:courses', (data) => this.emit('fetch:courses', data));
     }
 
@@ -69,14 +68,6 @@ class Engine extends EventEmitter {
      */
     _log(level, message) {
         this.emit('log', { date: Date.now(), level, message });
-    }
-
-    /**
-     * Fetches activity stream (triggers assignments event).
-     */
-    async getActivities() {
-        this._log('DEBUG', 'Triggering getActivities via browser.');
-        return this.session.getActivities();
     }
 
     /**
