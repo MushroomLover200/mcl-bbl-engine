@@ -20,7 +20,6 @@ class Engine extends EventEmitter {
     constructor({
         username,
         password,
-        debug = false,
         refreshInterval = 900000
     }) {
         super();
@@ -29,8 +28,7 @@ class Engine extends EventEmitter {
 
         this.session = new SessionManager({
             username,
-            password,
-            isHeadless: !debug
+            password
         });
 
         this.api = new APIClient();
@@ -158,7 +156,7 @@ class Engine extends EventEmitter {
         const announcementPromises = currentCourses.map(async (course) => {
             try {
                 const response = await this.api._fetchWithBBLCookies(
-                    `https://mcl.blackboard.com/learn/api/v1/courses/${course.id}/announcements?limit=5&offset=0&sort=startDateRestriction%28desc%29`
+                    `https://mcl.blackboard.com/learn/api/v1/courses/${course.id}/announcements?limit=10&offset=0&sort=startDateRestriction%28desc%29`
                 );
                 const data = await response.json();
                 // Inject course info into each announcement for context

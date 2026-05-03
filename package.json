@@ -6,9 +6,8 @@
   "author": "Fredrick Neil Erispe",
   "type": "commonjs",
   "main": "mbe.js",
-  "scripts": {
-  },
+  "scripts": {},
   "dependencies": {
-    "playwright": "^1.55.0"
+    "axios": "^1.16.0"
   }
 }

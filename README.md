@@ -1,11 +1,11 @@
 # MBE
-It uses playwright to interact with the BBL website. 
+Helps you interact with the blackboard learning platform programmatically (MCL only).
 
 ## Prerequisites
 * You must have NodeJS 22+ installed
-* Playwright Firefox must be installed
+
 ```
-npx playwright install firefox
+npm install
 ```
 
 
@@ -14,8 +14,7 @@ npx playwright install firefox
 // initialize an engine object
 const bbl = new Engine({
     username: '2025180071',
-    password: 'SomePassword',
-    debug: true,
+    password: 'SomePassword'
 })
 
 // getCalendar allows us to fetch calendar activities from the past and future
