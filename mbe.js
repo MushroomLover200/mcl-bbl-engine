@@ -93,11 +93,14 @@ class Engine extends EventEmitter {
     }
 
     _setupForwarding() {
-        this._proxyEvents(this.session, ['log', 'error', 'userData:update', 'cookie:update']);
+        this._proxyEvents(this.session, ['log', 'error', 'userData:update', 'cookie:update', 'xsrf:update']);
         this._proxyEvents(this.api, ['log', 'error', 'fetch:courses']);
 
         this.session.on('cookie:update', (cookie) => this.api.setSession({ cookie }));
         this.session.on('userData:update', (userData) => this.api.setSession({ userData }));
+        this.session.on('xsrf:update', (xsrfToken) => this.api.setSession({ xsrfToken }));
+
+        this.api.on('cookie:update', (setCookie) => this.session.updateCookies(setCookie));
     }
 
     _proxyEvents(source, events) {
@@ -141,13 +144,12 @@ class Engine extends EventEmitter {
             const response = await this.api._fetchWithBBLCookies(
                 `https://mcl.blackboard.com/learn/api/v1/courses/${courseId}/announcements?limit=10&offset=0&sort=startDateRestriction%28desc%29`
             );
-            const data = await response.json();
-            return data.results || [];
+            return response.data.results || [];
         }
 
         this._log('INFO', 'No courseId provided. Fetching announcements for all current term courses.');
         const currentCourses = await this.getCourses();
-        
+
         if (currentCourses.length === 0) {
             this._log('WARN', 'No courses found for the current term.');
             return [];
@@ -158,9 +160,8 @@ class Engine extends EventEmitter {
                 const response = await this.api._fetchWithBBLCookies(
                     `https://mcl.blackboard.com/learn/api/v1/courses/${course.id}/announcements?limit=10&offset=0&sort=startDateRestriction%28desc%29`
                 );
-                const data = await response.json();
                 // Inject course info into each announcement for context
-                return (data.results || []).map(ann => ({
+                return (response.data.results || []).map(ann => ({
                     ...ann,
                     courseCode: course.courseCode,
                     courseName: course.courseName
@@ -179,6 +180,51 @@ class Engine extends EventEmitter {
     }
 
     /**
+     * 
+     * @param {boolean} readStatus 
+     * @param {string} courseId 
+     * @param {string} announcementId 
+     * @returns 
+     */
+    async _setAnnouncementViewStatus(readStatus, courseId = '', announcementId = '') {
+
+        if (courseId == '' || announcementId == '') return false;
+
+        try {
+            const response = await this.api._fetchWithBBLCookies(
+                'https://mcl.blackboard.com/learn/api/v1/courses/' + courseId + '/announcements/' + announcementId + '/status',
+                {
+                    method: 'PUT',
+                    body: { isRead: readStatus }
+                }
+            );
+            return response.status >= 200 && response.status < 300;
+        } catch (err) {
+             this._log('ERROR', `Failed to set announcement status: ${err.message}`);
+             return false;
+        }
+    }
+
+    /**
+     * 
+     * @param {string} courseId 
+     * @param {string} announcementId 
+     */
+    async readAnnouncement(courseId = '', announcementId = '') {
+        return await this._setAnnouncementViewStatus(true, courseId, announcementId);
+    }
+
+    /**
+     * 
+     * @param {string} courseId 
+     * @param {string} announcementId 
+     * @returns 
+     */
+    async unreadAnnouncement(courseId = '', announcementId = '') {
+        return await this._setAnnouncementViewStatus(false, courseId, announcementId);
+    }
+
+    /**
      * Fetches calendar events within a specific time range.
      * @param {number} daysFromNow - How many days in the future to fetch.
      * @param {number} [daysToNow=0] - How many days in the past to fetch.
@@ -187,7 +233,7 @@ class Engine extends EventEmitter {
         this._log('INFO', `Fetching calendar from ${daysToNow} days ago to ${daysFromNow} days ahead`);
 
         const now = new Date();
-        
+
         // Calculate since date (past)
         const sinceDate = new Date(now.getTime() - (daysToNow * 24 * 60 * 60 * 1000));
         // Calculate until date (future)
@@ -199,7 +245,7 @@ class Engine extends EventEmitter {
         const response = await this.api._fetchWithBBLCookies(
             `https://mcl.blackboard.com/learn/api/v1/calendars/calendarItems?since=${since}&until=${until}`
         );
-        const calendar = await response.json();
+        const calendar = response.data;
 
         return calendar.results || calendar;
     }
