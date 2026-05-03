@@ -40,4 +40,8 @@ You can simply run sample.js.
 ``node sample.js 2025studentnumber password``
 
 ## Notes:
-The engine automatically hides courses from previous terms.
+* The engine automatically hides courses from previous terms.
+* **Term Boundaries**: It uses the following hardcoded date ranges to determine the current term:
+* - 1st Term (1T): August 18 to November 28
+* - 2nd Term (2T): November 29 to April 19 (the day before the 3rd term starts)
+* - 3rd Term (3T): April 20 onwards (until the next academic year starts on August 18)
