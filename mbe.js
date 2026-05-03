@@ -136,15 +136,21 @@ class Engine extends EventEmitter {
 
     /**
      * Fetches announcements. If no courseId is provided, fetches from all courses in the current term.
-     * @param {string} [courseId] - The specific course id (_dddddd_) to fetch from.
+     * @param {string} courseId - The specific course id (_dddddd_) to fetch from.
+     * @param {boolean} unreadOnly - Whether to return only unread items or not, unread items only by default
      */
-    async getAnnouncements(courseId = '') {
+    async getAnnouncements(unreadOnly = true, courseId = '') {
         if (courseId) {
             this._log('INFO', `Fetching announcements for course ${courseId}`);
             const response = await this.api._fetchWithBBLCookies(
                 `https://mcl.blackboard.com/learn/api/v1/courses/${courseId}/announcements?limit=10&offset=0&sort=startDateRestriction%28desc%29`
             );
-            return response.data.results || [];
+            
+            let results = response.data.results || [];
+            if (unreadOnly) {
+                 results = results.filter(val => val.readStatus && val.readStatus.isRead === false);
+            }
+            return results;
         }
 
         this._log('INFO', 'No courseId provided. Fetching announcements for all current term courses.');
@@ -160,8 +166,11 @@ class Engine extends EventEmitter {
                 const response = await this.api._fetchWithBBLCookies(
                     `https://mcl.blackboard.com/learn/api/v1/courses/${course.id}/announcements?limit=10&offset=0&sort=startDateRestriction%28desc%29`
                 );
+                
+                let results = response.data.results || [];
+                
                 // Inject course info into each announcement for context
-                return (response.data.results || []).map(ann => ({
+                return results.map(ann => ({
                     ...ann,
                     courseCode: course.courseCode,
                     courseName: course.courseName
@@ -174,9 +183,15 @@ class Engine extends EventEmitter {
 
         const allAnnouncements = await Promise.all(announcementPromises);
         // Flatten and sort by date descending
-        return allAnnouncements
+        let flattened = allAnnouncements
             .flat()
             .sort((a, b) => new Date(b.created || b.startDateRestriction) - new Date(a.created || a.startDateRestriction));
+            
+        if (unreadOnly) {
+             flattened = flattened.filter(val => val.readStatus && val.readStatus.isRead === false);
+        }
+        
+        return flattened;
     }
 
     /**
@@ -200,8 +215,8 @@ class Engine extends EventEmitter {
             );
             return response.status >= 200 && response.status < 300;
         } catch (err) {
-             this._log('ERROR', `Failed to set announcement status: ${err.message}`);
-             return false;
+            this._log('ERROR', `Failed to set announcement status: ${err.message}`);
+            return false;
         }
     }
 
@@ -248,6 +263,14 @@ class Engine extends EventEmitter {
         const calendar = response.data;
 
         return calendar.results || calendar;
+    }
+
+    async getGrades(courseId = '', activityId = '') {
+        let response = await this.api._fetchWithBBLCookies(
+            'https://mcl.blackboard.com/learn/api/v1/courses/' + courseId + '/gradebook/columns/' + activityId + '/grades'
+        );
+
+        console.log(response.data);
     }
 
     /**
