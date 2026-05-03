@@ -265,12 +265,92 @@ class Engine extends EventEmitter {
         return calendar.results || calendar;
     }
 
+    /**
+     * Fetches grades for a specific course and activity.
+     * @param {string} courseId 
+     * @param {string} activityId 
+     * @returns {Promise<object>}
+     */
     async getGrades(courseId = '', activityId = '') {
-        let response = await this.api._fetchWithBBLCookies(
-            'https://mcl.blackboard.com/learn/api/v1/courses/' + courseId + '/gradebook/columns/' + activityId + '/grades'
-        );
+        if (!courseId || !activityId) return null;
 
-        console.log(response.data);
+        try {
+            const response = await this.api._fetchWithBBLCookies(
+                `https://mcl.blackboard.com/learn/api/v1/courses/${courseId}/gradebook/columns/${activityId}/grades`
+            );
+            return response.data;
+        } catch (err) {
+            // 404 usually means the grade column doesn't exist or isn't accessible yet, 
+            // which we can treat as "no grades/attempts" for our purposes.
+            if (err.response && err.response.status === 404) {
+                return null;
+            }
+            this._log('ERROR', `Failed to fetch grades for course ${courseId}, activity ${activityId}: ${err.message}`);
+            return null;
+        }
+    }
+
+    /**
+     * Fetches activities that are currently active (between start and end date)
+     * and have no submission/attempts.
+     * @param {number} daysAhead - How many days to look into the future for activities.
+     * @returns {Promise<object[]>}
+     */
+    async getPendingActivities(daysAhead = 30) {
+        this._log('INFO', `Fetching pending activities for the next ${daysAhead} days.`);
+        
+        const now = new Date();
+        // Fetch calendar events
+        const events = await this.getCalendar(daysAhead, 0);
+        
+        // Filter for gradable items that are within their time range
+        const potentialActivities = events.filter(event => {
+            if (event.itemSourceType !== 'blackboard.platform.gradebook2.GradableItem') return false;
+            
+            const start = new Date(event.startDate);
+            const end = new Date(event.endDate);
+            
+            // "within the deadline (between start and end date)"
+            // If start and end are same, it's a single point in time (deadline).
+            // We consider it pending if we haven't passed the end date.
+            if (start.getTime() === end.getTime()) {
+                return now <= end;
+            }
+            
+            return now >= start && now <= end;
+        });
+
+        const pending = [];
+        for (const activity of potentialActivities) {
+            const courseId = activity.calendarId;
+            const activityId = activity.itemSourceId;
+
+            const gradeInfo = await this.getGrades(courseId, activityId);
+            
+            // If the grade API explicitly says we can't create an attempt, skip it.
+            if (gradeInfo && gradeInfo.permissions && gradeInfo.permissions.createAttempt === false) {
+                continue;
+            }
+
+            // Check if there are no attempts
+            const hasAttempts = gradeInfo && 
+                                gradeInfo.results && 
+                                gradeInfo.results.length > 0 && 
+                                gradeInfo.results[0].lastAttemptId !== null;
+
+            if (!hasAttempts) {
+                pending.push({
+                    title: activity.title,
+                    courseId,
+                    activityId,
+                    startDate: activity.startDate,
+                    endDate: activity.endDate,
+                    calendarName: activity.calendarNameLocalizable ? activity.calendarNameLocalizable.rawValue : null
+                });
+            }
+        }
+
+        return pending;
     }
 
     /**

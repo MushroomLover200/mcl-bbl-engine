@@ -22,7 +22,14 @@ async function test() {
     
     // Optional: Print a few events to verify
     calendarEvents.slice(0, 3).forEach(event => {
-        console.log(`- [${new Date(event.startDate).toLocaleString()}] ${event.title}`);
+        console.log(`- [${new Date(event.startDate).toLocaleString()}] [${new Date(event.endDate).toLocaleString()}] ${event.title}`);
+    });
+
+    // Fetch pending activities (active but no attempts)
+    const pendingActivities = await bbl.getPendingActivities(30);
+    console.log(`Fetched ${pendingActivities.length} pending activities.`);
+    pendingActivities.forEach(act => {
+        console.log(`- [PENDING] ${act.title} (Due: ${new Date(act.endDate).toLocaleString()})`);
     });
 
     await bbl.close();
