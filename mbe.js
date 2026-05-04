@@ -33,6 +33,7 @@ class Engine extends EventEmitter {
 
         this.api = new APIClient();
         this.isBusy = false;
+        this.courses = null;
 
         this._setupForwarding();
 
@@ -114,11 +115,16 @@ class Engine extends EventEmitter {
     }
 
     /**
-     * Fetches courses list directly.
+     * Fetches courses list directly. Caches the result after the first fetch.
      * Returns false if another operation is in progress.
+     * @param {boolean} forceRefresh - If true, bypasses the cache and fetches again.
      * @returns {Promise<object[]|boolean>}
      */
-    async getCourses() {
+    async getCourses(forceRefresh = false) {
+        if (!forceRefresh && this.courses) {
+            return this.courses;
+        }
+
         if (this.isBusy) {
             this._log('WARN', 'Engine is busy. Operation cancelled.');
             return false;
@@ -126,9 +132,11 @@ class Engine extends EventEmitter {
 
         this.isBusy = true;
         try {
-            return (await this.api.getCourses()).filter((data) => {
+            const fetchedCourses = await this.api.getCourses();
+            this.courses = fetchedCourses.filter((data) => {
                 return data.originalId.indexOf(this._getCurrentTerm().full) >= 0;
             });
+            return this.courses;
         } finally {
             this.isBusy = false;
         }
@@ -196,7 +204,7 @@ class Engine extends EventEmitter {
         if (asTreeString) {
             // Fetch courses to find the title for the root node
             const courses = await this.getCourses();
-            const course = courses.find(c => c.originalId === courseId);
+            const course = courses.find(c => c.id === courseId);
             const courseTitle = course ? course.courseName : courseId;
             return this._buildTreeString(courseTitle, sections);
         }
