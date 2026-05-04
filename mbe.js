@@ -9,7 +9,12 @@ const { stripHtmlWithFormatting } = require('./utils/index');
  */
 class Engine extends EventEmitter {
     /**
-     * Static factory method for clean initialization.
+     * Initializes the engine and establishes a session.
+     * @param {Object} options
+     * @param {string} options.username - The Blackboard username.
+     * @param {string} options.password - The Blackboard password.
+     * @param {number} [options.refreshInterval=900000] - Interval in ms to keep the session alive.
+     * @returns {Promise<Engine>} A promise that resolves to the initialized Engine instance.
      */
     static async create(options) {
         const engine = new Engine(options);
@@ -118,7 +123,7 @@ class Engine extends EventEmitter {
      * Fetches courses list directly. Caches the result after the first fetch.
      * Returns false if another operation is in progress.
      * @param {boolean} forceRefresh - If true, bypasses the cache and fetches again.
-     * @returns {Promise<object[]|boolean>}
+     * @returns {Promise<object[]|boolean>} A list of course objects.
      */
     async getCourses(forceRefresh = false) {
         if (!forceRefresh && this.courses) {
@@ -143,8 +148,9 @@ class Engine extends EventEmitter {
     }
 
     /**
-     * Fetch the sections of a course, i.e the course content. Usually module 0 to module 3
-     * @param {string} courseId 
+     * Fetch the root sections/lessons of a course.
+     * @param {string} courseId - The internal Blackboard course ID (e.g., '_12345_1')
+     * @returns {Promise<object[]>} Array of module/lesson objects
      */
     async getCourseSections(courseId) {
         let response = await this.api._fetchWithBBLCookies(
@@ -155,9 +161,10 @@ class Engine extends EventEmitter {
     }
 
     /**
-     * 
+     * Fetches the children of a specific course item (like a folder or module).
      * @param {string} courseId - The course id
      * @param {string} itemId - The item id, i.e id of a module 
+     * @returns {Promise<object[]>} Array of child items
      */
     async getCourseObjectChildren(courseId, itemId) {
         let response = await this.api._fetchWithBBLCookies(
@@ -169,12 +176,13 @@ class Engine extends EventEmitter {
 
     /**
      * Recursively fetches course contents to build a JSON tree.
-     * Starts from course sections (lessons) and traverses into folders.
-     * @param {string} courseId 
+     * Starts from course sections and traverses into folders.
+     * @param {string} courseId - The internal Blackboard course ID.
      * @param {boolean} asTreeString - If true, returns a string formatted like the `tree` command.
-     * @returns {Promise<object[]|string>}
+     * @returns {Promise<object[]|string>} The content tree JSON or a formatted string.
      */
     async getCourseContents(courseId, asTreeString = false) {
+
         this._log('INFO', `Building content tree for course ${courseId}`);
         let sections = await this.getCourseSections(courseId);
 
@@ -243,8 +251,9 @@ class Engine extends EventEmitter {
 
     /**
      * Fetches announcements. If no courseId is provided, fetches from all courses in the current term.
-     * @param {string} courseId - The specific course id (_dddddd_) to fetch from.
-     * @param {boolean} unreadOnly - Whether to return only unread items or not, unread items only by default
+     * @param {boolean} [unreadOnly=true] - Whether to return only unread items.
+     * @param {string} [courseId=''] - The specific course id (e.g., '_dddddd_1') to fetch from.
+     * @returns {Promise<object[]>} Array of announcement objects.
      */
     async getAnnouncements(unreadOnly = true, courseId = '') {
         if (courseId) {
@@ -302,11 +311,12 @@ class Engine extends EventEmitter {
     }
 
     /**
-     * 
-     * @param {boolean} readStatus 
-     * @param {string} courseId 
-     * @param {string} announcementId 
-     * @returns 
+     * Internal helper to set the read status of an announcement.
+     * @param {boolean} readStatus - True for read, false for unread.
+     * @param {string} courseId - The internal course ID.
+     * @param {string} announcementId - The internal announcement ID.
+     * @returns {Promise<boolean>} True if successful.
+     * @private
      */
     async _setAnnouncementViewStatus(readStatus, courseId = '', announcementId = '') {
 
@@ -328,19 +338,20 @@ class Engine extends EventEmitter {
     }
 
     /**
-     * 
+     * Marks a specific announcement as read.
      * @param {string} courseId 
      * @param {string} announcementId 
+     * @returns {Promise<boolean>}
      */
     async readAnnouncement(courseId = '', announcementId = '') {
         return await this._setAnnouncementViewStatus(true, courseId, announcementId);
     }
 
     /**
-     * 
+     * Marks a specific announcement as unread.
      * @param {string} courseId 
      * @param {string} announcementId 
-     * @returns 
+     * @returns {Promise<boolean>}
      */
     async unreadAnnouncement(courseId = '', announcementId = '') {
         return await this._setAnnouncementViewStatus(false, courseId, announcementId);
@@ -350,6 +361,7 @@ class Engine extends EventEmitter {
      * Fetches calendar events within a specific time range.
      * @param {number} daysFromNow - How many days in the future to fetch.
      * @param {number} [daysToNow=0] - How many days in the past to fetch.
+     * @returns {Promise<object[]>} Array of calendar event objects.
      */
     async getCalendar(daysFromNow, daysToNow = 0) {
         this._log('INFO', `Fetching calendar from ${daysToNow} days ago to ${daysFromNow} days ahead`);
@@ -374,11 +386,12 @@ class Engine extends EventEmitter {
 
     /**
      * Fetches grades for a specific course and activity.
-     * @param {string} courseId 
-     * @param {string} activityId 
-     * @returns {Promise<object>}
+     * @param {string} courseId - The internal course ID.
+     * @param {string} activityId - The gradebook column/activity ID.
+     * @returns {Promise<object|null>} Grade data or null if not found/accessible.
      */
     async getGrades(courseId = '', activityId = '') {
+
         if (!courseId || !activityId) return null;
 
         try {
