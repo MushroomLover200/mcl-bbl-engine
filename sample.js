@@ -13,25 +13,16 @@ async function test() {
         console.log(data);
     })
 
-    // let announcements = await bbl.getAnnouncements();
-    // console.log(`Fetched ${announcements.length} announcements from all courses.`);
+    // console.log(await bbl.getPendingActivities(10));
+    // let sections = (await bbl.getCourseSections('_60658_1'));
 
-    // Fetch calendar events: 14 days into the future, 7 days into the past
-    const calendarEvents = await bbl.getCalendar(14, 7);
-    console.log(`Fetched ${calendarEvents.length} calendar events.`);
-    
-    // Optional: Print a few events to verify
-    calendarEvents.slice(0, 3).forEach(event => {
-        console.log(`- [${new Date(event.startDate).toLocaleString()}] [${new Date(event.endDate).toLocaleString()}] ${event.title}`);
-    });
+    // // console.log(sections[1]);
+    // console.log(await bbl.getCourseObjectChildren('_60658_1', '_2604699_1'));
 
-    // Fetch pending activities (active but no attempts)
-    const pendingActivities = await bbl.getPendingActivities(30);
-    console.log(`Fetched ${pendingActivities.length} pending activities.`);
-    pendingActivities.forEach(act => {
-        console.log(`- [PENDING] ${act.title} (Due: ${new Date(act.endDate).toLocaleString()})`);
-    });
-
+    for (let course of (await bbl.getCourses())) {
+        // console.log(course);
+        console.log(await bbl.getCourseContents(course.id, true))
+    }
     await bbl.close();
 }
 

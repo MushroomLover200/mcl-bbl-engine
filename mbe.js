@@ -135,6 +135,105 @@ class Engine extends EventEmitter {
     }
 
     /**
+     * Fetch the sections of a course, i.e the course content. Usually module 0 to module 3
+     * @param {string} courseId 
+     */
+    async getCourseSections(courseId) {
+        let response = await this.api._fetchWithBBLCookies(
+            'https://mcl.blackboard.com/learn/api/v1/courses/' + courseId + '/contents/ROOT/children?limit=50'
+        );
+
+        return response.data.results.filter((val) => val.contentHandler === 'resource/x-bb-lesson'); // only gets the lessons (modules)
+    }
+
+    /**
+     * 
+     * @param {string} courseId - The course id
+     * @param {string} itemId - The item id, i.e id of a module 
+     */
+    async getCourseObjectChildren(courseId, itemId) {
+        let response = await this.api._fetchWithBBLCookies(
+            'https://mcl.blackboard.com/learn/api/v1/courses/' + courseId + '/contents/' + itemId + '/children?@view=Summary&limit=50'
+        );
+
+        return response.data.results;
+    }
+
+    /**
+     * Recursively fetches course contents to build a JSON tree.
+     * Starts from course sections (lessons) and traverses into folders.
+     * @param {string} courseId 
+     * @param {boolean} asTreeString - If true, returns a string formatted like the `tree` command.
+     * @returns {Promise<object[]|string>}
+     */
+    async getCourseContents(courseId, asTreeString = false) {
+        this._log('INFO', `Building content tree for course ${courseId}`);
+        let sections = await this.getCourseSections(courseId);
+
+        // Filter out unwanted sections
+        sections = sections.filter(item => {
+            if (!item.title) return true;
+            return !(
+                item.title.includes('Technical Support') ||
+                item.title.includes('Module 0') ||
+                item.title.includes('Ask LEIA') ||
+                item.title.includes('Academic and Student Support Services and Resources')
+            );
+        });
+
+        const resolveChildren = async (items) => {
+            for (let item of items) {
+                // Lessons and folders can contain other items
+                if (item.contentHandler === 'resource/x-bb-lesson' || item.contentHandler === 'resource/x-bb-folder') {
+                    item.children = await this.getCourseObjectChildren(courseId, item.id);
+                    await resolveChildren(item.children);
+                }
+            }
+        };
+
+        await resolveChildren(sections);
+
+        if (asTreeString) {
+            // Fetch courses to find the title for the root node
+            const courses = await this.getCourses();
+            const course = courses.find(c => c.originalId === courseId);
+            const courseTitle = course ? course.courseName : courseId;
+            return this._buildTreeString(courseTitle, sections);
+        }
+
+        return sections;
+    }
+
+    /**
+     * Helper to recursively format the content tree into a string.
+     */
+    _buildTreeString(rootTitle, items, prefix = '') {
+        let result = '';
+        
+        // Add root node if this is the initial call
+        if (prefix === '') {
+            result += `${rootTitle}\n`;
+        }
+
+        for (let i = 0; i < items.length; i++) {
+            const item = items[i];
+            const isLast = i === items.length - 1;
+            const pointer = isLast ? '└── ' : '├── ';
+            
+            const title = item.title || 'Untitled';
+            const handler = item.contentHandler ? ` (${item.contentHandler})` : '';
+            result += `${prefix}${pointer}${title}${handler}\n`;
+            
+            if (item.children && item.children.length > 0) {
+                const childPrefix = prefix + (isLast ? '    ' : '│   ');
+                result += this._buildTreeString(null, item.children, childPrefix);
+            }
+        }
+        return result;
+    }
+
+
+    /**
      * Fetches announcements. If no courseId is provided, fetches from all courses in the current term.
      * @param {string} courseId - The specific course id (_dddddd_) to fetch from.
      * @param {boolean} unreadOnly - Whether to return only unread items or not, unread items only by default
@@ -145,10 +244,10 @@ class Engine extends EventEmitter {
             const response = await this.api._fetchWithBBLCookies(
                 `https://mcl.blackboard.com/learn/api/v1/courses/${courseId}/announcements?limit=10&offset=0&sort=startDateRestriction%28desc%29`
             );
-            
+
             let results = response.data.results || [];
             if (unreadOnly) {
-                 results = results.filter(val => val.readStatus && val.readStatus.isRead === false);
+                results = results.filter(val => val.readStatus && val.readStatus.isRead === false);
             }
             return results;
         }
@@ -166,9 +265,9 @@ class Engine extends EventEmitter {
                 const response = await this.api._fetchWithBBLCookies(
                     `https://mcl.blackboard.com/learn/api/v1/courses/${course.id}/announcements?limit=10&offset=0&sort=startDateRestriction%28desc%29`
                 );
-                
+
                 let results = response.data.results || [];
-                
+
                 // Inject course info into each announcement for context
                 return results.map(ann => ({
                     ...ann,
@@ -186,11 +285,11 @@ class Engine extends EventEmitter {
         let flattened = allAnnouncements
             .flat()
             .sort((a, b) => new Date(b.created || b.startDateRestriction) - new Date(a.created || a.startDateRestriction));
-            
+
         if (unreadOnly) {
-             flattened = flattened.filter(val => val.readStatus && val.readStatus.isRead === false);
+            flattened = flattened.filter(val => val.readStatus && val.readStatus.isRead === false);
         }
-        
+
         return flattened;
     }
 
@@ -298,25 +397,25 @@ class Engine extends EventEmitter {
      */
     async getPendingActivities(daysAhead = 30) {
         this._log('INFO', `Fetching pending activities for the next ${daysAhead} days.`);
-        
+
         const now = new Date();
         // Fetch calendar events
         const events = await this.getCalendar(daysAhead, 0);
-        
+
         // Filter for gradable items that are within their time range
         const potentialActivities = events.filter(event => {
             if (event.itemSourceType !== 'blackboard.platform.gradebook2.GradableItem') return false;
-            
+
             const start = new Date(event.startDate);
             const end = new Date(event.endDate);
-            
+
             // "within the deadline (between start and end date)"
             // If start and end are same, it's a single point in time (deadline).
             // We consider it pending if we haven't passed the end date.
             if (start.getTime() === end.getTime()) {
                 return now <= end;
             }
-            
+
             return now >= start && now <= end;
         });
 
@@ -326,17 +425,17 @@ class Engine extends EventEmitter {
             const activityId = activity.itemSourceId;
 
             const gradeInfo = await this.getGrades(courseId, activityId);
-            
+
             // If the grade API explicitly says we can't create an attempt, skip it.
             if (gradeInfo && gradeInfo.permissions && gradeInfo.permissions.createAttempt === false) {
                 continue;
             }
 
             // Check if there are no attempts
-            const hasAttempts = gradeInfo && 
-                                gradeInfo.results && 
-                                gradeInfo.results.length > 0 && 
-                                gradeInfo.results[0].lastAttemptId !== null;
+            const hasAttempts = gradeInfo &&
+                gradeInfo.results &&
+                gradeInfo.results.length > 0 &&
+                gradeInfo.results[0].lastAttemptId !== null;
 
             if (!hasAttempts) {
                 pending.push({
@@ -345,6 +444,7 @@ class Engine extends EventEmitter {
                     activityId,
                     startDate: activity.startDate,
                     endDate: activity.endDate,
+                    type: activity.dynamicCalendarItemProps.eventType,
                     calendarName: activity.calendarNameLocalizable ? activity.calendarNameLocalizable.rawValue : null
                 });
             }
