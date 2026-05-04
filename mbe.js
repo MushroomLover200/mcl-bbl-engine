@@ -151,7 +151,7 @@ class Engine extends EventEmitter {
             'https://mcl.blackboard.com/learn/api/v1/courses/' + courseId + '/contents/ROOT/children?limit=50'
         );
 
-        return response.data.results.filter((val) => val.contentHandler === 'resource/x-bb-lesson'); // only gets the lessons (modules)
+        return response.data.results.filter((val) => val.contentHandler === 'resource/x-bb-lesson' || val.contentHandler === 'resource/x-bb-folder'); // only gets the lessons (modules)
     }
 
     /**
