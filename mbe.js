@@ -123,7 +123,14 @@ class Engine extends EventEmitter {
      * Fetches courses list directly. Caches the result after the first fetch.
      * Returns false if another operation is in progress.
      * @param {boolean} forceRefresh - If true, bypasses the cache and fetches again.
-     * @returns {Promise<object[]|boolean>} A list of course objects.
+     * @returns {Promise<Array<{
+     *   originalId: string,
+     *   courseCode: string,
+     *   term: string,
+     *   schoolYear: string,
+     *   courseName: string,
+     *   id: string
+     * }>|boolean>} A list of course objects, or false if busy.
      */
     async getCourses(forceRefresh = false) {
         if (!forceRefresh && this.courses) {
@@ -253,7 +260,38 @@ class Engine extends EventEmitter {
      * Fetches announcements. If no courseId is provided, fetches from all courses in the current term.
      * @param {boolean} [unreadOnly=true] - Whether to return only unread items.
      * @param {string} [courseId=''] - The specific course id (e.g., '_dddddd_1') to fetch from.
-     * @returns {Promise<object[]>} Array of announcement objects.
+     * @returns {Promise<Array<{
+     *   permanent: boolean,
+     *   pushNotify: boolean,
+     *   readTracking: boolean,
+     *   readStatus: {
+     *     updateDate: string|null,
+     *     isRead: boolean,
+     *     firstReadDate: string|null
+     *   },
+     *   courseId: string,
+     *   createdDate: string,
+     *   modifiedDate: string,
+     *   title: string,
+     *   creatorUserId: string,
+     *   isDraft: boolean,
+     *   body: {
+     *     rawText: string,
+     *     displayText: string,
+     *     webLocation: string,
+     *     fileLocation: string
+     *   },
+     *   type: string,
+     *   startDateRestriction: string|null,
+     *   endDateRestriction: string|null,
+     *   permissions: {
+     *     viewCourseOrOrgAnnouncements: boolean
+     *   },
+     *   id: string,
+     *   position: number,
+     *   courseCode?: string,
+     *   courseName?: string
+     * }>>} Array of announcement objects.
      */
     async getAnnouncements(unreadOnly = true, courseId = '') {
         if (courseId) {
@@ -361,7 +399,28 @@ class Engine extends EventEmitter {
      * Fetches calendar events within a specific time range.
      * @param {number} daysFromNow - How many days in the future to fetch.
      * @param {number} [daysToNow=0] - How many days in the past to fetch.
-     * @returns {Promise<object[]>} Array of calendar event objects.
+     * @returns {Promise<Array<{
+     *   title: string,
+     *   startDate: string,
+     *   endDate: string,
+     *   visibility: string,
+     *   itemSourceType: string,
+     *   itemSourceId: string,
+     *   calendarId: string,
+     *   dynamicCalendarItemProps: {
+     *     eventType: string,
+     *     categoryId: string,
+     *     gradable: boolean,
+     *     attemptable: boolean,
+     *     isDateRangeLimited: boolean,
+     *     handle: string
+     *   },
+     *   calendarNameLocalizable: {
+     *     rawValue: string
+     *   },
+     *   color: string,
+     *   [key: string]: any
+     * }>>} Array of calendar event objects.
      */
     async getCalendar(daysFromNow, daysToNow = 0) {
         this._log('INFO', `Fetching calendar from ${daysToNow} days ago to ${daysFromNow} days ahead`);
@@ -414,7 +473,15 @@ class Engine extends EventEmitter {
      * Fetches activities that are currently active (between start and end date)
      * and have no submission/attempts.
      * @param {number} daysAhead - How many days to look into the future for activities.
-     * @returns {Promise<object[]>}
+     * @returns {Promise<Array<{
+     *   title: string,
+     *   courseId: string,
+     *   activityId: string,
+     *   startDate: string,
+     *   endDate: string,
+     *   type: string,
+     *   calendarName: string|null
+     * }>>} Array of pending activity objects.
      */
     async getPendingActivities(daysAhead = 30) {
         this._log('INFO', `Fetching pending activities for the next ${daysAhead} days.`);
